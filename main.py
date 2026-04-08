@@ -3,6 +3,7 @@ import pandas as pd
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from utils import extract_fixations, load_answers
+import mat73
 
 # --------------------------------------------------
 # Configuration
@@ -23,7 +24,7 @@ for participant in PARTICIPANTS:
     mat_file = os.path.join(DATA_DIR, f"{participant}.mat")
     print(f"Loading eye-tracking data for {participant}...")
 
-    mat = loadmat(mat_file)
+    mat = mat73.loadmat(mat_file)
     fix_df = extract_fixations(mat, participant)
     all_fixations.append(fix_df)
 
