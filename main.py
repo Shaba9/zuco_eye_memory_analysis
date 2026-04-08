@@ -1,36 +1,89 @@
-
 import os
 import pandas as pd
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from utils import extract_fixations, load_answers
 
-DATA_DIR = "data/task1-NR"
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
+PARTICIPANTS = ["YAC", "YAG"]
+
+DATA_DIR = "data/task1-NR/Matlab files"
 ANSWERS_DIR = "data/answers"
+
+# --------------------------------------------------
+# Load eye-tracking data (fixations)
+# --------------------------------------------------
 
 all_fixations = []
 
-for file in os.listdir(DATA_DIR):
-    if file.endswith('.mat'):
-        subject_id = file.replace('.mat', '')
-        mat = loadmat(os.path.join(DATA_DIR, file))
-        fix_df = extract_fixations(mat, subject_id)
-        all_fixations.append(fix_df)
+for participant in PARTICIPANTS:
+    mat_file = os.path.join(DATA_DIR, f"{participant}.mat")
+    print(f"Loading eye-tracking data for {participant}...")
+
+    mat = loadmat(mat_file)
+    fix_df = extract_fixations(mat, participant)
+    all_fixations.append(fix_df)
 
 fixations = pd.concat(all_fixations, ignore_index=True)
-answers = load_answers(ANSWERS_DIR)
 
-merged = fixations.merge(answers, on=["subject", "sentence_id"], how="inner")
+# --------------------------------------------------
+# Load memory / comprehension answers (NR only)
+# --------------------------------------------------
 
-features = merged.groupby(["subject", "sentence_id"]).agg({
-    "duration": "mean",
-    "correct": "mean"
-}).reset_index()
+answers = load_answers(ANSWERS_DIR, PARTICIPANTS)
 
-corr = features["duration"].corr(features["correct"])
-print("Correlation between mean fixation duration and memory accuracy:", corr)
+# --------------------------------------------------
+# Merge eye-tracking and memory data
+# --------------------------------------------------
 
-plt.hexbin(fixations["x"], fixations["y"], gridsize=40, cmap='hot')
-plt.colorbar()
-plt.title("Gaze Heatmap (All Subjects)")
+merged = fixations.merge(
+    answers,
+    on=["subject", "sentence_id"],
+    how="inner"
+)
+
+# --------------------------------------------------
+# Compute fixation-based features
+# --------------------------------------------------
+
+features = (
+    merged
+    .groupby(["subject", "sentence_id"])
+    .agg(
+        mean_fixation_duration=("duration", "mean"),
+        memory_accuracy=("correct", "mean")
+    )
+    .reset_index()
+)
+
+# --------------------------------------------------
+# Correlation analysis
+# --------------------------------------------------
+
+corr = features["mean_fixation_duration"].corr(
+    features["memory_accuracy"]
+)
+
+print("\nCorrelation between mean fixation duration and memory accuracy:")
+print(corr)
+
+# --------------------------------------------------
+# Gaze heat map (visual attention dynamics)
+# --------------------------------------------------
+
+plt.figure(figsize=(6, 5))
+plt.hexbin(
+    fixations["x"],
+    fixations["y"],
+    gridsize=40,
+    cmap="hot"
+)
+plt.colorbar(label="Fixation Density")
+plt.title("Gaze Heat Map (YAC + YAG, Normal Reading)")
+plt.xlabel("X Gaze Position")
+plt.ylabel("Y Gaze Position")
+plt.tight_layout()
 plt.show()
