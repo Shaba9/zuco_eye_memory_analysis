@@ -3,35 +3,29 @@ import pandas as pd
 from scipy.io import loadmat
 
 
-def extract_fixations(mat, subject_id):
+def extract_sentence_metrics(mat, subject_id):
     """
-    Extract fixation-level eye-tracking data
-    from a ZuCo task1-NR participant .mat file.
+    Extract sentence-level eye-tracking metrics from ZuCo task1-NR data
+    loaded via mat73.
     """
 
-    data = mat["data"]
-    rows = []
+    subj = mat.get(subject_id, next(iter(mat.values())))
 
-    for sentence in data[0]:
-        sentence_id = int(sentence["sentence_id"][0][0])
-        fixations = sentence["fixations"][0]
+    mean_fix = subj["mean_t1"]
 
-        for f in fixations:
-            rows.append({
-                "subject": subject_id,
-                "sentence_id": sentence_id,
-                "x": float(f["x"][0][0]),
-                "y": float(f["y"][0][0]),
-                "duration": float(f["duration"][0][0])
-            })
+    df = pd.DataFrame({
+        "subject": subject_id,
+        "sentence_id": range(1, len(mean_fix) + 1),
+        "mean_fixation_duration": mean_fix
+    })
 
-    return pd.DataFrame(rows)
+    return df
 
 
 def load_answers(path, participants):
     """
     Load Normal Reading (NR) comprehension answers
-    for the selected participants.
+    and force scalar values.
     """
 
     all_answers = []
@@ -40,14 +34,14 @@ def load_answers(path, participants):
         nr_file = os.path.join(path, participant, "NR.mat")
         print(f"Loading memory answers for {participant}...")
 
-        mat = loadmat(nr_file)
+        mat = loadmat(nr_file, squeeze_me=True)
         answers = mat["answers"]
 
         for row in answers:
             all_answers.append({
                 "subject": participant,
                 "sentence_id": int(row[1]),
-                "correct": int(row[2] == 1)
+                "correct": int(row[2].item() == 1)
             })
 
     return pd.DataFrame(all_answers)

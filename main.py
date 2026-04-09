@@ -1,34 +1,37 @@
 import os
 import pandas as pd
-from scipy.io import loadmat
 import matplotlib.pyplot as plt
-from utils import extract_fixations, load_answers
 import mat73
+
+from utils import extract_sentence_metrics, load_answers
 
 # --------------------------------------------------
 # Configuration
 # --------------------------------------------------
 
-PARTICIPANTS = ["YAC", "YAG"]
+DEBUG = True          # 🔧 turn off when ready
+DEBUG_N = 5           # 🔧 number of sentences to analyze in debug mode
+
+PARTICIPANTS = ["YAC"]    # analyzing only YAC
 
 DATA_DIR = "data/task1-NR/Matlab files"
 ANSWERS_DIR = "data/answers"
 
 # --------------------------------------------------
-# Load eye-tracking data (fixations)
+# Load sentence-level eye-tracking data
 # --------------------------------------------------
 
-all_fixations = []
+all_sentence_metrics = []
 
 for participant in PARTICIPANTS:
     mat_file = os.path.join(DATA_DIR, f"{participant}.mat")
     print(f"Loading eye-tracking data for {participant}...")
 
     mat = mat73.loadmat(mat_file)
-    fix_df = extract_fixations(mat, participant)
-    all_fixations.append(fix_df)
+    sent_df = extract_sentence_metrics(mat, participant)
+    all_sentence_metrics.append(sent_df)
 
-fixations = pd.concat(all_fixations, ignore_index=True)
+sentence_metrics = pd.concat(all_sentence_metrics, ignore_index=True)
 
 # --------------------------------------------------
 # Load memory / comprehension answers (NR only)
@@ -37,54 +40,69 @@ fixations = pd.concat(all_fixations, ignore_index=True)
 answers = load_answers(ANSWERS_DIR, PARTICIPANTS)
 
 # --------------------------------------------------
-# Merge eye-tracking and memory data
+# Merge gaze and memory data
 # --------------------------------------------------
 
-merged = fixations.merge(
+merged = sentence_metrics.merge(
     answers,
     on=["subject", "sentence_id"],
     how="inner"
 )
 
 # --------------------------------------------------
-# Compute fixation-based features
+# DEBUG: limit to first N rows
 # --------------------------------------------------
 
-features = (
-    merged
-    .groupby(["subject", "sentence_id"])
-    .agg(
-        mean_fixation_duration=("duration", "mean"),
-        memory_accuracy=("correct", "mean")
-    )
-    .reset_index()
+if DEBUG:
+    print(f"\nDEBUG MODE ON — limiting to first {DEBUG_N} sentences")
+    merged = merged.head(DEBUG_N)
+
+# --------------------------------------------------
+# Force scalar conversion (MATLAB → Python safety)
+# --------------------------------------------------
+
+merged["mean_fixation_duration"] = merged["mean_fixation_duration"].apply(
+    lambda x: float(x[0]) if hasattr(x, "__len__") else float(x)
 )
+
+merged["correct"] = merged["correct"].apply(
+    lambda x: int(x[0]) if hasattr(x, "__len__") else int(x)
+)
+
+# --------------------------------------------------
+# Sanity check (recommended during debugging)
+# --------------------------------------------------
+
+print("\nMerged dtypes:")
+print(merged.dtypes)
+
+print("\nMerged preview:")
+print(merged)
 
 # --------------------------------------------------
 # Correlation analysis
 # --------------------------------------------------
 
-corr = features["mean_fixation_duration"].corr(
-    features["memory_accuracy"]
+corr = merged["mean_fixation_duration"].corr(
+    merged["correct"]
 )
 
 print("\nCorrelation between mean fixation duration and memory accuracy:")
 print(corr)
 
 # --------------------------------------------------
-# Gaze heat map (visual attention dynamics)
+# Optional visualization (off by default in debug)
 # --------------------------------------------------
 
-plt.figure(figsize=(6, 5))
-plt.hexbin(
-    fixations["x"],
-    fixations["y"],
-    gridsize=40,
-    cmap="hot"
-)
-plt.colorbar(label="Fixation Density")
-plt.title("Gaze Heat Map (YAC + YAG, Normal Reading)")
-plt.xlabel("X Gaze Position")
-plt.ylabel("Y Gaze Position")
-plt.tight_layout()
-plt.show()
+if not DEBUG:
+    plt.figure(figsize=(6, 5))
+    plt.scatter(
+        merged["mean_fixation_duration"],
+        merged["correct"],
+        alpha=0.5
+    )
+    plt.xlabel("Mean Fixation Duration (sentence-level)")
+    plt.ylabel("Memory Accuracy")
+    plt.title("Visual Attention vs Memory Performance (NR)")
+    plt.tight_layout()
+    plt.show()
