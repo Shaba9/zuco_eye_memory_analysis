@@ -9,10 +9,10 @@ from utils import extract_sentence_metrics, load_answers
 # Configuration
 # --------------------------------------------------
 
-DEBUG = True          # 🔧 turn off when ready
-DEBUG_N = 5           # 🔧 number of sentences to analyze in debug mode
+DEBUG = True          # set to False for full analysis
+DEBUG_N = 5           # only used when DEBUG=True
 
-PARTICIPANTS = ["YAC"]    # analyzing only YAC
+PARTICIPANTS = ["YAC"]
 
 DATA_DIR = "data/task1-NR/Matlab files"
 ANSWERS_DIR = "data/answers"
@@ -40,17 +40,30 @@ sentence_metrics = pd.concat(all_sentence_metrics, ignore_index=True)
 answers = load_answers(ANSWERS_DIR, PARTICIPANTS)
 
 # --------------------------------------------------
-# Merge gaze and memory data
+# Aggregate memory accuracy per sentence (Option A)
+# --------------------------------------------------
+
+memory_by_sentence = (
+    answers
+    .groupby(["subject", "sentence_id"])
+    .agg(
+        memory_accuracy=("correct", "mean")  # proportion correct
+    )
+    .reset_index()
+)
+
+# --------------------------------------------------
+# Merge gaze and memory data (sentence-level)
 # --------------------------------------------------
 
 merged = sentence_metrics.merge(
-    answers,
+    memory_by_sentence,
     on=["subject", "sentence_id"],
     how="inner"
 )
 
 # --------------------------------------------------
-# DEBUG: limit to first N rows
+# DEBUG: limit rows for fast iteration
 # --------------------------------------------------
 
 if DEBUG:
@@ -58,19 +71,17 @@ if DEBUG:
     merged = merged.head(DEBUG_N)
 
 # --------------------------------------------------
-# Force scalar conversion (MATLAB → Python safety)
+# Force scalar conversion (MATLAB safety)
 # --------------------------------------------------
 
 merged["mean_fixation_duration"] = merged["mean_fixation_duration"].apply(
     lambda x: float(x[0]) if hasattr(x, "__len__") else float(x)
 )
 
-merged["correct"] = merged["correct"].apply(
-    lambda x: int(x[0]) if hasattr(x, "__len__") else int(x)
-)
+merged["memory_accuracy"] = merged["memory_accuracy"].astype(float)
 
 # --------------------------------------------------
-# Sanity check (recommended during debugging)
+# Sanity checks
 # --------------------------------------------------
 
 print("\nMerged dtypes:")
@@ -80,29 +91,29 @@ print("\nMerged preview:")
 print(merged)
 
 # --------------------------------------------------
-# Correlation analysis
+# Correlation analysis (sentence-level)
 # --------------------------------------------------
 
 corr = merged["mean_fixation_duration"].corr(
-    merged["correct"]
+    merged["memory_accuracy"]
 )
 
 print("\nCorrelation between mean fixation duration and memory accuracy:")
 print(corr)
 
 # --------------------------------------------------
-# Optional visualization (off by default in debug)
+# Optional visualization (off during DEBUG)
 # --------------------------------------------------
 
 if not DEBUG:
     plt.figure(figsize=(6, 5))
     plt.scatter(
         merged["mean_fixation_duration"],
-        merged["correct"],
-        alpha=0.5
+        merged["memory_accuracy"],
+        alpha=0.6
     )
     plt.xlabel("Mean Fixation Duration (sentence-level)")
-    plt.ylabel("Memory Accuracy")
+    plt.ylabel("Memory Accuracy (proportion correct)")
     plt.title("Visual Attention vs Memory Performance (NR)")
     plt.tight_layout()
     plt.show()

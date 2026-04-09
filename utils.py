@@ -10,7 +10,6 @@ def extract_sentence_metrics(mat, subject_id):
     """
 
     subj = mat.get(subject_id, next(iter(mat.values())))
-
     mean_fix = subj["mean_t1"]
 
     df = pd.DataFrame({
@@ -25,7 +24,7 @@ def extract_sentence_metrics(mat, subject_id):
 def load_answers(path, participants):
     """
     Load Normal Reading (NR) comprehension answers
-    and force scalar values.
+    and return scalar values.
     """
 
     all_answers = []
